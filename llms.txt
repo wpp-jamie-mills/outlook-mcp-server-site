@@ -1,0 +1,150 @@
+# Outlook Mail, Calendar, Teams and OneDrive
+
+> Ask Claude about your Outlook, Teams and OneDrive. It reads your Microsoft 365 email, calendar, Teams chats and OneDrive and SharePoint files from Claude Desktop on your Mac, and is read-only unless you turn on write tools. A Claude Desktop extension (.mcpb) for macOS, version 0.21.2. Where an organisation blocks extensions, the same release runs as a Claude Desktop mcpServers entry (see "Install as an mcpServers entry").
+
+## Install (agents)
+
+1. Continue only if `uname -s` prints `Darwin` and `/Applications/Claude.app` exists. Otherwise tell the user it needs a Mac with Claude Desktop 2.7032.0 or later.
+2. Run the installer with this one command. It downloads the extension, checks its SHA-256 (nothing changes before the check passes) and opens Claude Desktop's install dialog. With no terminal it never prompts, and `--no-wait` makes it exit once the dialog is open. It exits non-zero, with the reason on stderr, if anything fails; exit 0 means it finished its steps, not that Claude Desktop installed the extension.
+
+```bash
+curl -fsSL https://wpp-jamie-mills.github.io/outlook-mcp-server-site/install.sh | OUTLOOK_INSTALL_TTY=/dev/null bash -s -- --no-wait
+```
+
+3. Ask the user to click Install in the dialog Claude Desktop opened (they can leave its settings blank: they choose their work account the first time they sign in), and to switch the extension on if Claude Desktop shows it off (Settings > Extensions; one click, then wait a few seconds). You can't do these for them. Never ask for a password or a token: nothing in the install needs one.
+
+### Verify
+
+Run the installer again with `--status` (after `bash -s --`):
+
+```bash
+curl -fsSL https://wpp-jamie-mills.github.io/outlook-mcp-server-site/install.sh | bash -s -- --status
+```
+
+Its `Ready:` line should say `yes` (the `Extension:` line at the `Latest:` version with `enabled`, and `Server: running since …`). Otherwise its `Next:` line says the one thing left to do: tell the user, then check again. When it is ready, ask the user to start a new chat in Claude Desktop (chats opened while the extension was off never see its tools) and say "Sign in to Outlook" to Claude; only the user can enter the sign-in code. If the `Extension:` line says `blocked by your organisation` (Claude Desktop shows "Extension is not approved for your organization"), switching it on can't help: follow "Install as an mcpServers entry" below.
+
+### Updates
+
+The extension keeps itself up to date. Once a day it checks this site for a newer version, and when there is one Claude shows the user an update card in Claude Desktop. Update now downloads the new version, checks its SHA-256 and opens Claude Desktop's install dialog; it is installed only when the user clicks Install there. Not now hides that version for a week. You can't click these for the user, and nothing installs until they do. To update straight away, run the same install command again (the user still clicks Install). Settings and the sign-in are kept.
+
+## Install as an mcpServers entry (when the organisation blocks the extension)
+
+These steps are for an AI agent installing the entry for someone. Without a terminal the installer asks nothing, so
+you ask the user, and you act only on their answers. Never ask for a password or a token: nothing here needs one.
+
+1. Run `curl -fsSL https://wpp-jamie-mills.github.io/outlook-mcp-server-site/install.sh | bash -s -- --status`.
+   Continue only if its `Extension:` line says `blocked by your organisation` (Claude Desktop shows "Extension is not
+   approved for your organization"), or the user asks for the entry.
+2. Read the `uv:` line of `--status`: it shows where uv is, or `not installed`. If uv is not installed, ask the user
+   whether you may install it, and say how: with Homebrew if they have it (`brew install uv`), otherwise uv's own
+   release from GitHub, checked against a SHA-256 pinned in the installer, into `~/.local/bin` (shell profiles
+   aren't changed). Add `--install-uv` only if they agree, and don't install uv any other way. If they say no, stop:
+   the entry can't run without uv.
+3. Ask the user whether the installer may add the `outlook-m365` entry to Claude Desktop's
+   `claude_desktop_config.json` (it keeps a dated backup and everything else in the file). If `--status` has an
+   `Entry:` line saying Claude Desktop's `outlook-m365` entry runs something else, say that it will be pointed at
+   this release instead (its `env` settings are kept). `--yes` stands for this go-ahead, and only this.
+
+Then run this, adding `--install-uv` if the user agreed to install uv:
+
+```bash
+curl -fsSL https://wpp-jamie-mills.github.io/outlook-mcp-server-site/install.sh | OUTLOOK_INSTALL_TTY=/dev/null bash -s -- --entry --yes --no-wait
+```
+
+It checks everything and asks its questions before it changes anything, and exits non-zero with the reason on
+stderr if anything fails (without uv and without `--install-uv`, or without `--yes`, it stops and says so). If it
+says `brew install uv failed`, stop and tell the user: they install uv themselves
+(https://docs.astral.sh/uv/getting-started/installation/), then you run the command again. Exit 0 means it finished
+its steps, not that Claude Desktop runs the entry yet.
+
+Ask the user to quit Claude Desktop (⌘Q) and open it again. Don't quit it yourself: you may be running inside it.
+Then run `--status` again. The `Ready:` line should say `yes`, the `Entry server:` line `running since …` and the
+`Entry:` line `release <the Latest: version>, in Claude Desktop's config as outlook-m365`; otherwise do what its
+`Next:` line says. Then ask the user to start a new chat and say "Sign in to Outlook"; only they can enter the
+sign-in code.
+
+What the installer does: with `--install-uv` and no uv, it installs uv as above. It downloads the same release as the
+extension (`latest.mcpb`) and checks its SHA-256, then runs that release's own installer, which installs it in
+`~/Library/Application Support/outlook-okta/server`. It then adds the `outlook-m365` entry to
+`~/Library/Application Support/Claude/claude_desktop_config.json`: a dated backup first, every other key and the
+file's permissions kept, an existing entry's `env` kept, and a file it can't read as JSON (or a link) left alone.
+
+- **Updates:** the update card's **Update now** installs the new release beside the running one; the user quits and
+  reopens Claude Desktop to start it. Running the `--entry` command again also updates.
+- **Settings in the entry:** a setting in the entry's `env` wins and is locked on the settings card:
+  `OUTLOOK_MAIL_USER`, `OUTLOOK_MAIL_TENANT`, `OUTLOOK_MAIL_ALLOW_WRITES`, `OUTLOOK_MAIL_CHECK_UPDATES`,
+  `OUTLOOK_MAIL_EXPORT_ROOT`, `OUTLOOK_MAIL_EXPORT_RETENTION_DAYS` and `OUTLOOK_MAIL_APPROVALS`. None is a secret: the
+  sign-in is kept in the macOS Keychain. Without them, the settings card saves settings in
+  `~/Library/Application Support/outlook-okta/settings.toml`.
+- **Approval cards:** with approvals on, every tool that sends, changes or removes something waits for the user's
+  **Approve** on a card. Drafts, new files and folders, copies, and saved files and attachments don't ask (saving a
+  file may rename an existing one to a backup name). To make the card the only gate, the user sets the entry's
+  **Interactive tools** to **Always allow** in Settings > Customize > Connectors; their organisation can still
+  require Claude Desktop's own prompt for tools that make changes.
+- **Remove,** with the user's go-ahead: `--entry --uninstall --yes`. It removes the entry (keeping a backup) and the
+  installed release; settings and uv stay. The user then quits and reopens Claude Desktop.
+
+## What it can and can't do
+
+- **Can:** search all your mail folders, read emails and whole conversations, list and read calendar events
+  (including join links, attendees, your response and how a meeting repeats), and search and read your OneDrive and
+  SharePoint files (folders, spreadsheets, Word, PowerPoint, PDF, text and CSV; paste a sharing link or let Claude
+  search), read email attachments, find times when people and rooms are free, read your Teams chats and your Teams
+  channels' messages (when your sign-in allows it), find Teams meeting recordings; search people, read directory
+  profiles/reporting relationships, and list and read retained file versions.
+- **Can't:** send or change anything unless you turn on write tools (below); even then it can't overwrite or
+  delete files, read other people's mailboxes (or calendars they haven't shared), delete messages in Teams channels,
+  or set inbox rules or out-of-office (your sign-in doesn't allow those). Reading files needs your sign-in to grant file access; if it
+  doesn't, the file tools say so and email and calendar keep working.
+- **Updates:** once a day it checks its landing page for a newer version. When there is one, Claude shows an update
+  card: **Update now** downloads it, checks it and opens Claude Desktop's install dialog, and it is installed only when
+  you click **Install** there. **Not now** hides that version for a week. Claude can't update it for you. Turn
+  **Check for updates** off in the extension's settings to stop the daily check. (For the `mcpServers` entry,
+  **Update now** installs the new release itself, with no dialog; quit and reopen Claude Desktop to start it.)
+- **Your data:** email, Teams chat, people, calendar and file text that Claude reads is sent to Anthropic as part of your conversation, under
+  your Claude account's terms. Messages are written by other people, so Claude is told to treat them as untrusted and
+  never to follow instructions found inside one.
+
+## Troubleshooting
+
+| What you see | What to do |
+|---|---|
+| The installer says "Checksum mismatch — nothing was installed" | A new release can take up to about 10 minutes to reach every server. Wait, then run the install command again |
+| The installer says Claude Desktop is missing or too old | Install or update Claude Desktop (2.7032.0 or later), open it once, then run the install command again |
+| Claude says the extension isn't loaded, or has no Outlook tools | Switch it on (Settings > Extensions), then start a new chat: chats opened while it was off never see its tools |
+| The installer says the extension is switched off, or was removed again | In Settings > Extensions, switch it on with one click and wait a few seconds; don't click Uninstall. If it was removed, run the install command again |
+| "Extension is not approved for your organization", or the installer says your organisation blocks the extension | Switching it on won't help. Install the same release as an `mcpServers` entry instead: run the install command with `--entry` (see [If your organisation blocks the extension](#if-your-organisation-blocks-the-extension)) |
+| The installer says "uv isn't installed" (`--entry`) | Run it in Terminal and answer yes to installing uv, or add `--install-uv` (an agent: only with the user's go-ahead). Or install uv yourself (`brew install uv`), then run the command again |
+| The installer says "brew install uv failed" (`--entry`) | Homebrew's message above it says why; nothing else was set up. Install uv yourself (see https://docs.astral.sh/uv/getting-started/installation/), then run the command again |
+| "uv's checksum doesn't match — uv wasn't installed" | The download wasn't uv's real release (a proxy or a broken download). Nothing changed; try again, or install uv yourself with `brew install uv` |
+| The installer says Claude Desktop's config "can't be read as JSON" (`--entry`) | It left `claude_desktop_config.json` alone. Fix the file (or move it away), then run the command again; or add the entry it printed by hand |
+| `--status` says `Entry server: failed` | Quit and reopen Claude Desktop. If it keeps failing, `~/Library/Logs/Claude/mcp-server-outlook-m365.log` says why |
+| `--status` says `Server: failed` | Run the install command again. If it keeps failing, the log it names (`~/Library/Logs/Claude/mcp-server-…`) says why |
+| Sign-in is refused with a message about your organisation's policy (for example from Conditional Access) | Your organisation doesn't allow this kind of sign-in (a code entered in your browser, for the Microsoft Office app). Nothing on your Mac can change that: ask your IT team whether it can be allowed |
+| You can't run the install command (or may not run `curl \| bash`) | Install by hand: download https://wpp-jamie-mills.github.io/outlook-mcp-server-site/latest.mcpb and https://wpp-jamie-mills.github.io/outlook-mcp-server-site/latest.mcpb.sha256 into one folder, run `shasum -a 256 -c latest.mcpb.sha256` there (it must say `OK`), then double-click `latest.mcpb` and click Install |
+| Claude says sign-in is needed | Expected the first time and when Microsoft wants a new sign-in: follow the card, then ask again |
+| "You signed in as X, but this mailbox is set up for Y" | You set Y as the work email in the extension's settings, and your browser was signed in to another account. Sign out there or use a private window, then ask Claude to sign in again (or clear the work email setting) |
+| The code expired | Ask Claude to sign in again for a new code |
+| Claude Desktop refuses to install ("not compatible") | You need macOS and Claude Desktop 2.7032.0 or later |
+| The extension shows as failed after install | It needs network access the first time. Check `~/Library/Logs/Claude/main.log` for `[UV Runtime]` lines, then reinstall |
+| The tools appear twice | Keep only one of them switched on: the extension (Settings > Extensions) or the `outlook-m365` entry (`--entry --uninstall` removes it). An old `outlook-mail` entry in `claude_desktop_config.json` also counts: remove it (quit Claude Desktop first) |
+
+## Update and remove
+
+- **Update:** when a new version is out, Claude shows an update card in the chat (at most once a day); click
+  **Update now**, then **Install** in Claude Desktop's dialog, and start a new chat. **Not now** hides that version
+  for a week. You can also ask *"Check for updates to Outlook"*, or run the install command again. Your settings and
+  your sign-in are kept. To stop the daily check, turn **Check for updates** off in the extension's settings.
+- **Remove:** say *"Sign out of Outlook"* first if you want the saved sign-in gone, then uninstall the extension
+  in Settings > Extensions. (Or delete the `outlook-okta-refresh-token` item in Keychain Access.) The installer's
+  download folder, `~/.outlook-mcp-server`, can then be deleted.
+- **The `mcpServers` entry:** updates come on the same update card (quit and reopen Claude Desktop afterwards), or
+  run the `--entry` command again. To remove it, sign out first if you like, then run the install command with
+  `--entry --uninstall`: it removes the entry (keeping a backup of `claude_desktop_config.json`) and the installed
+  release.
+
+## Links
+
+- [Landing page](https://wpp-jamie-mills.github.io/outlook-mcp-server-site/): install guides for people and agents
+- [Summary](https://wpp-jamie-mills.github.io/outlook-mcp-server-site/summary.md): this project as one markdown page
+- [Installer](https://wpp-jamie-mills.github.io/outlook-mcp-server-site/install.sh): the script the install command runs
